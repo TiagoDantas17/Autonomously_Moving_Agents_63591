@@ -8,7 +8,12 @@ public class Bot : MonoBehaviour
 
     void Start()
     {
-        agent = this.GetComponent<NavMeshAgent>();
+        agent = GetComponent<NavMeshAgent>();
+
+        if (agent == null)
+            Debug.LogError("O ladrão não tem NavMeshAgent!");
+        if (target == null)
+            Debug.LogError("O campo Target está vazio!");
     }
 
     void Seek(Vector3 location)
@@ -18,33 +23,35 @@ public class Bot : MonoBehaviour
 
     void Flee(Vector3 location)
     {
-        Vector3 fleeVector = location - this.transform.position;
-        agent.SetDestination(this.transform.position - fleeVector);
+        Vector3 fleeDirection = (transform.position - location).normalized;
+        Vector3 destination = transform.position + fleeDirection * 10f;
+
+        NavMeshHit hit;
+        if (NavMesh.SamplePosition(destination, out hit, 10f, NavMesh.AllAreas))
+            agent.SetDestination(hit.position);
+        else
+            Debug.LogWarning("Destino de fuga fora do NavMesh");
     }
 
-    void Pursue()
+    void Evade()
     {
-        Vector3 targetDir = target.transform.position - this.transform.position;
+        Vector3 targetDir = target.transform.position - transform.position;
 
-        float targetSpeed = Mathf.Abs(target.GetComponent<Drive>().currentSpeed);
+        float targetSpeed = 0f;
+        Drive drive;
+        if (target.TryGetComponent(out drive))
+            targetSpeed = Mathf.Abs(drive.currentSpeed);
+        else
+            Debug.LogWarning("O Target não tem o script Drive");
 
-        // Se o alvo está parado, ou está à frente a vir na minha direção, basta fazer Seek
-        float relativeHeading = Vector3.Angle(this.transform.forward, target.transform.forward);
-        float toTarget = Vector3.Angle(this.transform.forward, targetDir);
-
-        if ((toTarget > 90 && relativeHeading < 20) || targetSpeed < 0.01f)
-        {
-            Seek(target.transform.position);
-            return;
-        }
-
-        // Quanto tempo vou demorar a chegar, e onde o alvo vai estar nesse tempo
-        float lookAhead = targetDir.magnitude / (agent.speed + targetSpeed);
-        Seek(target.transform.position + target.transform.forward * lookAhead);
+        float lookAhead = targetDir.magnitude / (agent.speed + targetSpeed + 0.01f);
+        Flee(target.transform.position + target.transform.forward * lookAhead);
     }
 
     void Update()
     {
-        Pursue();
+        if (agent == null || target == null) return;
+
+        Evade();
     }
 }
