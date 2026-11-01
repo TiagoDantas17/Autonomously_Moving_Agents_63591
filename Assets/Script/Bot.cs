@@ -5,25 +5,12 @@ public class Bot : MonoBehaviour
 {
     NavMeshAgent agent;
     public GameObject target;
-
-    // Distâncias de deteção
-    public float detectDistance = 15f;  // a partir daqui reage ao polícia
-    public float loseDistance = 25f;    // a partir daqui "perde-o de vista" e volta a vaguear
-
-    bool reacting = false;
-
-    // Wander
-    Vector3 wanderTarget = Vector3.zero;
+    private Drive ds;
 
     void Start()
     {
-        agent = GetComponent<NavMeshAgent>();
-        wanderTarget = new Vector3(Random.Range(-1.0f, 1.0f), 0, Random.Range(-1.0f, 1.0f));
-
-        if (agent == null)
-            Debug.LogError("O ladrão não tem NavMeshAgent!");
-        if (target == null)
-            Debug.LogError("O campo Target está vazio!");
+        agent = this.GetComponent<NavMeshAgent>();
+        ds = target.GetComponent<Drive>();
     }
 
     void Seek(Vector3 location)
@@ -33,58 +20,42 @@ public class Bot : MonoBehaviour
 
     void Flee(Vector3 location)
     {
-        Vector3 fleeDirection = (transform.position - location).normalized;
-        Vector3 destination = transform.position + fleeDirection * 10f;
-
-        NavMeshHit hit;
-        if (NavMesh.SamplePosition(destination, out hit, 10f, NavMesh.AllAreas))
-            agent.SetDestination(hit.position);
+        Vector3 fleeVector = location - this.transform.position;
+        agent.SetDestination(this.transform.position - fleeVector);
     }
 
     void Pursue()
     {
-        Vector3 targetDir = target.transform.position - transform.position;
+        Vector3 targetDir = target.transform.position - this.transform.position;
 
-        float targetSpeed = 0f;
-        Drive drive;
-        if (target.TryGetComponent(out drive))
-            targetSpeed = Mathf.Abs(drive.currentSpeed);
+        float relativeHeading = Vector3.Angle(this.transform.forward, target.transform.forward);
+        float toTarget = Vector3.Angle(this.transform.forward, targetDir);
 
-        float relativeHeading = Vector3.Angle(transform.forward, target.transform.forward);
-        float toTarget = Vector3.Angle(transform.forward, targetDir);
-
-        if ((toTarget > 90 && relativeHeading < 20) || targetSpeed < 0.01f)
+        if ((toTarget > 90 && relativeHeading < 20) || ds.currentSpeed < 0.01f)
         {
             Seek(target.transform.position);
             return;
         }
 
-        float lookAhead = targetDir.magnitude / (agent.speed + targetSpeed);
+        float lookAhead = targetDir.magnitude / (agent.speed + ds.currentSpeed);
         Seek(target.transform.position + target.transform.forward * lookAhead);
     }
 
     void Evade()
     {
-        Vector3 targetDir = target.transform.position - transform.position;
-
-        float targetSpeed = 0f;
-        Drive drive;
-        if (target.TryGetComponent(out drive))
-            targetSpeed = Mathf.Abs(drive.currentSpeed);
-
-        float lookAhead = targetDir.magnitude / (agent.speed + targetSpeed + 0.01f);
+        Vector3 targetDir = target.transform.position - this.transform.position;
+        float lookAhead = targetDir.magnitude / (agent.speed + ds.currentSpeed);
         Flee(target.transform.position + target.transform.forward * lookAhead);
     }
 
+    Vector3 wanderTarget = Vector3.zero;
     void Wander()
     {
-        float wanderRadius = 5;
-        float wanderDistance = 15;
-        float wanderJitter = 0.5f;
+        float wanderRadius = 10;
+        float wanderDistance = 20;
+        float wanderJitter = 1;
 
-        wanderTarget += new Vector3(Random.Range(-1.0f, 1.0f) * wanderJitter,
-                                    0,
-                                    Random.Range(-1.0f, 1.0f) * wanderJitter);
+        wanderTarget += new Vector3(Random.Range(-1.0f, 1.0f) * wanderJitter, 0, Random.Range(-1.0f, 1.0f) * wanderJitter);
 
         wanderTarget.Normalize();
         wanderTarget *= wanderRadius;
@@ -95,21 +66,27 @@ public class Bot : MonoBehaviour
         Seek(targetWorld);
     }
 
+    void Hide()
+    {
+        float dist = Mathf.Infinity;
+        Vector3 chosenSpot = Vector3.zero;
+
+        for (int i = 0; i < World.Instance.GetHidingSpots().Length; i++)
+        {
+            Vector3 hideDir = World.Instance.GetHidingSpots()[i].transform.position - target.transform.position;
+            Vector3 hidePos = World.Instance.GetHidingSpots()[i].transform.position + hideDir.normalized * 10;
+
+            if (Vector3.Distance(this.transform.position, hidePos) < dist)
+            {
+                chosenSpot = hidePos;
+                dist = Vector3.Distance(this.transform.position, hidePos);
+            }
+        }
+        Seek(chosenSpot);
+    }
     void Update()
     {
-        if (agent == null || target == null) return;
-
-        float distance = Vector3.Distance(transform.position, target.transform.position);
-
-        // Histerese: começa a reagir a 15 e só desiste a 25, para não ficar a mudar de comportamento
-        if (distance < detectDistance)
-            reacting = true;
-        else if (distance > loseDistance)
-            reacting = false;
-
-        if (reacting)
-            Evade();   // troca por Pursue(); se quiseres que ele persiga
-        else
-            Wander();
+        Hide();
     }
+
 }
