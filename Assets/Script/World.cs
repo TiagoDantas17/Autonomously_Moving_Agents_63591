@@ -10,10 +10,7 @@ public sealed class World
         hidingSpots = GameObject.FindGameObjectsWithTag("hide");
     }
 
-    private World()
-    {
-
-    }
+    private World() { }
 
     public static World Instance
     {
